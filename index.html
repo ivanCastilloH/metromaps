@@ -1,0 +1,366 @@
+import random
+from collections import deque, defaultdict
+import tkinter as tk
+from tkinter import scrolledtext
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.linear_model import LinearRegression
+import pyttsx3  # Para el asistente de voz
+import speech_recognition as sr  # Para reconocer la voz
+import re
+
+
+class MetroSystem:
+    def __init__(self):
+        self.lines = {
+              "Linea 1": [
+                "Observatorio", "Tacubaya","Juanacatlan", "Chapultepec", "Sevilla", "Insurgentes",
+                "Cuauhtemoc", "Balderas", "Salto del Agua", "Isabel la Catolica", "Pino Suarez",
+                "Merced", "Candelaria", "San Lazaro", "Moctezuma", "Balbuena", "Boulevard Puerto Aereo",
+                "Gomez Farias", "Zaragoza", "Pantitlan"
+            ],
+            "Linea 2": [
+                "Cuatro Caminos", "Panteones", "Tacuba", "Cuitlahuac", "Popotla", "Colegio Militar",
+                "Normal", "San Cosme", "Revolucion", "Hidalgo", "Bellas Artes", "Allende", "Zocalo",
+                "Pino Suarez", "San Antonio Abad", "Chabacano", "Viaducto", "Xola", "Villa de Cortes",
+                "Nativitas", "Portales", "Ermita", "General Anaya", "Tasqueña"
+            ],
+          "Linea 3": [
+                "Indios Verdes", "Deportivo 18 de Marzo", "Potrero", "La Raza", "Tlatelolco",
+                "Guerrero", "Hidalgo", "Juarez", "Balderas", "Ninos Heroes", "Hospital General",
+                "Centro Medico", "Etiopia", "Eugenia", "Division del Norte", "Zapata", "Coyoacan",
+                "Viveros", "Miguel Angel de Quevedo", "Copilco", "Universidad"
+            ],
+            "Linea 4": [
+                "Martin Carrera", "Talisman", "Bondojito", "Consulado", "Canal del Norte", "Morelos",
+                "Candelaria", "Fray", "Servando", "Jamaica", "Santa Anita"
+            ],
+            "Linea 5": [
+                "Pantitlan", "Hangares", "Terminal Aerea", "Oceanía", "Aragon", "Eduardo Molina",
+                "Consulado", "Valle Gomez", "Misterios", "La Raza", "Autobuses del Norte",
+                "Instituto del Petroleo", "Politcnico"
+            ],
+            "Linea 6": [
+                "El Rosario", "Tezozomoc", "Azcapotzalco", "Ferrería", "Norte 45", "Vallejo",
+                "Instituto del Petroleo", "Lindavista", "Deportivo 18 de Marzo", "La Villa-Basilica",
+                "Martin Carrera"
+            ],
+            "Linea 7": [
+                "El Rosario", "Aquiles Sedan", "Camarones", "Refineria", "Tacuba", "San Joaquin",
+                "Polanco", "Auditorio", "Constituyentes", "Tacubaya", "San Pedro de los Pinos",
+                "San Antonio", "Mixcoac", "Barranca Del Muerto"
+            ],
+            "Linea 8": [
+                "Garibaldi", "Bellas Artes", "San Juan de Letran", "Salto del Agua", "Doctores",
+                "Obrera", "Chabacano", "La Viga", "Santa Anita", "Coyuya", "Iztacalco", "Apatlaco",
+                "Aculco", "Escuadron 201", "Atlalilco", "Iztapalapa", "Cerro De Estrella", "U.A.M.",
+                "Constitucion De 1917"
+            ],
+            "Linea 9": [
+                "Tacubaya", "Patriotismo", "Chilpancingo", "Centro Medico", "Lazaro Cardenas",
+                "Chabacano", "Jamaica", "Mixiuhca", "Velodromo", "Ciudad Deportiva", "Puebla",
+                "Pantitlan"
+            ],
+            "Linea A": [
+                "Pantitlan", "Agricola Oriental", "Canal de San Juan", "Tepalcates", "Guelatao",
+                "Penon Viejo", "Acatitla", "Santa Marta", "Los Reyes", "La Paz"
+            ],
+            "Linea B": [
+                "Ciudad Azteca","Plaza Aragon", "Olímpica", "Ecatepec", "Muzquiz", "Rio de los Remedios",
+                "Impulsora", "Nezahualcoyotl", "Villa de Aragon", "Bosque de Aragon", "Deportivo Oceanía",
+                "Oceanía", "Romero Rubio", "Flores Magon", "San Lazaro", "Morelos", "Tepito", "Lagunilla",
+                "Garibaldi", "Guerrero", "Buenavista"
+            ],
+            "Linea 12": [
+                "Tlahuac", "Tlatenco", "Zapotitlan", "Nopalera", "Olivos", "Tezonco", "Periferico Oriente",
+                "Calle 11", "Lomas Estrella", "San Andres Tomatlan", "Culhuacan", "Atlalilco",
+                "Mexicaltzingo", "Ermita", "Eje Central", "Parque de los Venados", "Zapata", "Hospital 20 de Noviembre",
+                "Insurgentes Sur", "Mixcoac"
+            ],
+
+        }
+
+        # Generar ocupación aleatoria para cada estación
+        self.station_occupancy = {station: random.randint(0, 100) for line in self.lines.values() for station in line}
+        self.adjacency_list = self.build_adjacency_list()
+        self.graph = self.build_graph()
+
+    def build_adjacency_list(self):
+        adjacency_list = defaultdict(set)
+        for line, stations in self.lines.items():
+            for i in range(len(stations)):
+                if i > 0:
+                    adjacency_list[stations[i]].add(stations[i - 1])
+                    adjacency_list[stations[i - 1]].add(stations[i])
+        return adjacency_list
+
+    def build_graph(self):
+        G = nx.Graph()
+        for line, stations in self.lines.items():
+            for i in range(len(stations)):
+                if i > 0:
+                    G.add_edge(stations[i], stations[i - 1])  # Conexiones bidireccionales
+        return G
+
+
+    def calculate_travel_time(self, path):
+        average_travel_time_per_station = 2  # Tiempo promedio en minutos por estación
+        return (len(path) - 1) * average_travel_time_per_station
+    def find_shortest_path(self, start_station, end_station):
+        if start_station not in self.graph:
+            raise ValueError(f"Estación de inicio '{start_station}' no se encuentra en el sistema.")
+        if end_station not in self.graph:
+            raise ValueError(f"Estación de destino '{end_station}' no se encuentra en el sistema.")
+        return nx.shortest_path(self.graph, source=start_station, target=end_station)
+
+    def calculate_travel_time(self, path):
+        average_travel_time_per_station = 2  # Tiempo promedio en minutos por estación
+        return (len(path) - 1) * average_travel_time_per_station
+
+    def predict_station_occupancy(self, station):
+        if station not in self.station_occupancy:
+            return None
+        data = [random.randint(30, 90) for _ in range(10)]  # Datos simulados de ocupación histórica (en %)
+        X = np.array(range(1, len(data) + 1)).reshape(-1, 1)
+        y = np.array(data)
+
+        model = LinearRegression()
+        model.fit(X, y)
+        prediction = model.predict(np.array([[len(data) + 1]]))
+        return prediction[0]
+
+
+    def draw_graph(self, path=None, alternate_paths=None):
+        plt.figure(figsize=(15, 15))  # Aumentar el tamaño de la figura
+        pos = nx.spring_layout(self.graph, seed=42, k=0.15)
+
+        # Colores y tamaños dinámicos
+        node_colors = ['lightgray'] * len(self.graph.nodes())
+        edge_colors = ['lightgray'] * len(self.graph.edges())
+
+        if path:  # Si se proporciona una ruta, la destacamos en azul
+            path_edges = [(path[i], path[i + 1]) for i in range(len(path) - 1)]
+            node_colors = ['blue' if node in path else 'lightgray' for node in self.graph.nodes()]
+            edge_colors = ['blue' if edge in path_edges or (edge[1], edge[0]) in path_edges else 'lightgray' for edge in self.graph.edges()]
+
+        if alternate_paths:  # Si hay rutas alternas, las destacamos en rojo
+            for alt_path in alternate_paths:
+                alt_path_edges = [(alt_path[i], alt_path[i + 1]) for i in range(len(alt_path) - 1)]
+                node_colors = ['red' if node in alt_path else c for node, c in zip(self.graph.nodes(), node_colors)]
+                edge_colors = ['red' if edge in alt_path_edges or (edge[1], edge[0]) in alt_path_edges else ec for edge, ec in zip(self.graph.edges(), edge_colors)]
+
+        # Dibujar el grafo
+        nx.draw(self.graph, pos, with_labels=True, node_color=node_colors, edge_color=edge_colors,
+                node_size=300, font_size=8, font_weight="bold", width=1.5)
+
+        plt.title("Sistema de Metro de la Ciudad de Mexico", fontsize=16, fontweight='bold')
+        plt.show()
+        # Aquí sigue el código de la visualización del grafo como estaba en tu versión original
+        pass
+
+
+class MetroApp:
+    def __init__(self, master):
+        self.master = master
+        master.title("Sistema de Metro de la Ciudad de Mexico")
+
+        # Establecer el color de fondo y la fuente
+        self.master.config(bg="#e1f5fe")
+
+        # Crear un marco para organizar mejor la interfaz
+        frame = tk.Frame(master, bg="#e1f5fe")
+        frame.pack(padx=20, pady=20)
+
+        self.metro_system = MetroSystem()
+        self.shortest_path = None
+        self.alternate_paths = []
+        self.touch_counter = 0  # Contador de toques
+        
+
+        # Estilo de los Labels y Entrys
+        label_style = {'bg': '#e1f5fe', 'font': ('Helvetica', 12, 'bold')}
+        entry_style = {'font': ('Helvetica', 12)}
+    
+        # Establecer etiquetas e inputs
+        self.start_label = tk.Label(frame, text="Estación de Inicio:", **label_style)
+        self.start_label.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        self.start_entry = tk.Entry(frame, **entry_style)
+        self.start_entry.grid(row=0, column=1, padx=10, pady=5)
+
+        self.end_label = tk.Label(frame, text="Estación de Destino:", **label_style)
+        self.end_label.grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        self.end_entry = tk.Entry(frame, **entry_style)
+        self.end_entry.grid(row=1, column=1, padx=10, pady=5)
+
+        
+
+        # Botones con colores y estilo
+        button_style = {'font': ('Helvetica', 12, 'bold'), 'bg': '#4CAF50', 'fg': 'white', 'width': 20}
+        self.find_button = tk.Button(frame, text="Buscar Ruta", command=self.find_route, **button_style)
+        self.find_button.grid(row=2, column=0, padx=10, pady=10, sticky="w")
+
+        self.alt_paths_button = tk.Button(frame, text="Generar Rutas Alternativas", command=self.find_alternate_routes,
+                                          **button_style)
+        self.alt_paths_button.grid(row=2, column=1, padx=10, pady=10)
+
+        self.travel_time_button = tk.Button(frame, text="Calcular Tiempo Estimado", command=self.calculate_travel_time,
+                                            **button_style)
+        self.travel_time_button.grid(row=3, column=0, padx=10, pady=10, sticky="w")
+
+        self.generate_map_button = tk.Button(frame, text="Generar Mapa", command=self.generate_map, **button_style)
+        self.generate_map_button.grid(row=3, column=1, padx=10, pady=10)
+
+        self.show_routes_button = tk.Button(frame, text="Mostrar Ruta y Alternativas", command=self.show_routes,
+                                             **button_style)
+        self.show_routes_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
+        
+
+        # Botón para asistente por voz
+        self.voice_button = tk.Button(frame, text="Usar Asistente por Voz", command=self.voice_assistant, **button_style)
+        self.voice_button.grid(row=5, column=0, columnspan=2, padx=10, pady=10)
+
+        # Cuadro de texto para resultados
+        self.result_text = scrolledtext.ScrolledText(frame, width=60, height=20, font=("Helvetica", 12),
+                                                      bg="#fff8e1", fg="#333", borderwidth=2, relief="groove")
+        self.result_text.grid(row=6, column=0, columnspan=2, padx=10, pady=10)
+        self.result_text.tag_configure("header", font=("Helvetica", 14, "bold"), foreground="#d32f2f")
+        self.result_text.tag_configure("path", foreground="#1976d2", font=("Helvetica", 12, "bold"))
+        self.result_text.tag_configure("time", foreground="#388e3c", font=("Helvetica", 12, "bold"))
+
+        # Inicializar pyttsx3 (asistente por voz)
+        self.engine = pyttsx3.init()
+
+    def find_route(self):
+        start_station = self.start_entry.get().strip()
+        end_station = self.end_entry.get().strip()
+
+        try:
+            self.shortest_path = self.metro_system.find_shortest_path(start_station, end_station)
+            travel_time = self.metro_system.calculate_travel_time(self.shortest_path)
+
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, "Ruta más corta:\n", "header")
+            self.result_text.insert(tk.END, f"{self.shortest_path}\n", "path")
+            self.result_text.insert(tk.END, "Tiempo estimado de viaje:\n", "header")
+            self.result_text.insert(tk.END, f"{travel_time} minutos\n", "time")
+
+        except ValueError as e:
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, str(e))
+
+    def find_alternate_routes(self):
+        start_station = self.start_entry.get().strip()
+        end_station = self.end_entry.get().strip()
+
+        if self.shortest_path is None:
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, "Primero, busca una ruta más corta.\n", "header")
+            return
+
+        try:
+            self.alternate_paths = self.metro_system.find_all_alternate_paths(start_station, end_station)
+
+            self.result_text.delete(1.0, tk.END)
+            if self.alternate_paths:
+                self.result_text.insert(tk.END, "Rutas alternativas encontradas:\n", "header")
+                for path in self.alternate_paths:
+                    self.result_text.insert(tk.END, f"{path}\n", "path")
+            else:
+                self.result_text.insert(tk.END, "No se encontraron rutas alternas.\n", "header")
+
+        except ValueError as e:
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, str(e))
+
+    def calculate_travel_time(self):
+        start_station = self.start_entry.get().strip()
+        end_station = self.end_entry.get().strip()
+
+        try:
+            shortest_path = self.metro_system.find_shortest_path(start_station, end_station)
+            travel_time = self.metro_system.calculate_travel_time(shortest_path)
+
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END,
+                                    f"Tiempo estimado de viaje desde '{start_station}' a '{end_station}': {travel_time} minutos\n", "time")
+
+        except ValueError as e:
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, str(e))
+
+    def generate_map(self):
+        # Generar el mapa sin rutas resaltadas
+        self.metro_system.draw_graph()
+
+    def show_routes(self):
+        # Mostrar la ruta más corta y las rutas alternas en el mapa
+        self.metro_system.draw_graph(path=self.shortest_path, alternate_paths=self.alternate_paths)
+        self.metro_system.draw_graph(path)
+    def voice_assistant(self):
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            self.speak("Hola, por favor, dime la estación de inicio y destino.")
+            audio = r.listen(source)
+
+        try:
+            # Convertir el audio a texto en español (México)
+            command = r.recognize_google(audio, language="es-MX")
+            print(f"Reconocido: {command}")  # Para verificar en consola
+            self.speak(f"Recibí el comando: {command}")
+
+            # Procesar el comando para buscar la ruta
+            self.process_voice_command(command)
+
+        except sr.UnknownValueError:
+            self.speak("Lo siento, no entendí lo que dijiste. Intenta nuevamente.")
+        except sr.RequestError:
+            self.speak("Hubo un error con el servicio de reconocimiento de voz.")
+
+    
+    def process_voice_command(self, command):
+        # NUEVA IMPLEMENTACIÓN – reemplaza TODO el contenido anterior
+        patron = re.search(r"(?:buscar ruta )?de (.+?) a (.+)", command.lower())
+
+        if patron:
+            inicio = patron.group(1).strip().title()
+            destino = patron.group(2).strip().title()
+
+            # Rellenar los campos en pantalla
+            self.start_entry.delete(0, tk.END)
+            self.start_entry.insert(0, inicio)
+            self.end_entry.delete(0, tk.END)
+            self.end_entry.insert(0, destino)
+
+            try:
+                self.shortest_path = self.metro_system.find_shortest_path(inicio, destino)
+                travel_time = self.metro_system.calculate_travel_time(self.shortest_path)
+
+                ruta_str = " → ".join(self.shortest_path)
+                mensaje = (
+                    f"La ruta más corta desde {inicio} a {destino} es: "
+                    f"{ruta_str}. Tiempo estimado: {travel_time} minutos."
+                )
+
+                # Mostrar en el cuadro de texto
+                self.result_text.delete(1.0, tk.END)
+                self.result_text.insert(tk.END, mensaje, "path")
+
+                # Decirlo por voz
+                self.speak(mensaje)
+
+            except ValueError:
+                self.speak("Una o ambas estaciones no son válidas.")
+        else:
+            self.speak("Por favor di, por ejemplo: buscar ruta de Balderas a Tacuba.")
+
+    def speak(self, text):
+        self.engine.say(text)
+        self.engine.runAndWait()
+
+ 
+
+# Crear la ventana de la interfaz gráfica
+root = tk.Tk()
+app = MetroApp(root)
+root.mainloop()
